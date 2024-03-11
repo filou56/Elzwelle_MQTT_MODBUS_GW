@@ -1,0 +1,8 @@
+
+Zwei virtuell ttys in /tmp !!!
+
+WONT'WORK with lib serial !!!! Linux:	socat -d -d pty,raw,echo=0,link=/tmp/ttyS0 pty,raw,echo=0,link=/tmp/ttyS1
+
+use tty0tty kerneldriver:	sudo modprobe tty0tty 	/dev/tnt0 <=> /dev/tnt1 ... 2-3,4-5,6-7
+
+Windows 10: com0com V2.2 (com0com-2.2.2.0-x64-fre-signed.zip) Ports COM10 und COM11 <--> /dev/ttyS9 und /dev/ttyS10 (Cygwin)
