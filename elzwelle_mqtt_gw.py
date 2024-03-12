@@ -68,6 +68,7 @@ class sheetapp_tk(tkinter.Tk):
         self.menuFile = tkinter.Menu(self.menuBar, tearoff=False)
         self.menuFile.add_command(command = self.saveSheet, label="Blatt speichern")
         self.menuFile.add_command(command = self.loadSheet, label="Blatt laden")
+        self.menuFile.add_command(command = self.clearSheet, label="Blatt löschen")
         
         self.menuBar.add_cascade(label="Datei",menu=self.menuFile)
         
@@ -81,9 +82,6 @@ class sheetapp_tk(tkinter.Tk):
           
         self.startTab   = ttk.Frame(self.tabControl) 
         self.tabControl.add(self.startTab, text ='Start') 
-        
-        self.finishTab   = ttk.Frame(self.tabControl) 
-        self.tabControl.add(self.finishTab, text ='Ziel')
         
         self.tabControl.pack(expand = 1, fill ="both") 
          
@@ -101,49 +99,21 @@ class sheetapp_tk(tkinter.Tk):
                                index_fg  = "gray",
                                font = ("Calibri", 12, "bold")
                             )
-        self.startSheet.enable_bindings()
         self.startSheet.grid(column = 0, row = 0)
         self.startSheet.grid(row = 0, column = 0, sticky = "nswe")
         self.startSheet.span('A:').align('right')
         self.startSheet.span('A').readonly()
         self.startSheet.span('B').readonly()
-        self.startSheet.span('C').readonly()
+        if not config.getboolean('view','edit_enabled'):
+            self.startSheet.span('C').readonly()
         self.startSheet.span('D').readonly()
         if config.getboolean('view','hide_slots'):
             self.startSheet.hide_columns(3)
         
         self.startSheet.disable_bindings("All")
-        self.startSheet.enable_bindings("edit_cell","single_select","drag_select","row_select","copy")
+        self.startSheet.enable_bindings("edit_cell","single_select","right_click_popup_menu",
+                                        "drag_select","row_select","copy")
         self.startSheet.extra_bindings("end_edit_cell", func=self.startEndEditCell)
-        
-        #----- Start Page -------
-                 
-        self.finishTab.grid_columnconfigure(0, weight = 1)
-        self.finishTab.grid_rowconfigure(0, weight = 1)
-        self.finishSheet = Sheet(self.finishTab,
-                               name = 'finishSheet',
-                               #data = [['00:00:00','0,00','',''] for r in range(2)],
-                               header = ['Uhrzeit','Zeitstempel','Startnummer','Slot'],
-                               header_bg = "azure",
-                               header_fg = "black",
-                               index_bg  = "azure",
-                               index_fg  = "gray",
-                               font = ("Calibri", 12, "bold")
-                            )
-        self.finishSheet.enable_bindings()
-        self.finishSheet.grid(column = 0, row = 0)
-        self.finishSheet.grid(row = 0, column = 0, sticky = "nswe")
-        self.finishSheet.span('A:').align('right')
-        self.finishSheet.span('A').readonly()
-        self.finishSheet.span('B').readonly()
-        self.finishSheet.span('C').readonly()
-        self.finishSheet.span('D').readonly()
-        if config.getboolean('view','hide_slots'):
-            self.startSheet.hide_columns(3)
-        
-        self.finishSheet.disable_bindings("All")
-        self.finishSheet.enable_bindings("edit_cell","single_select","drag_select","row_select","copy")
-        self.finishSheet.extra_bindings("end_edit_cell", func=self.finishEndEditCell)
         
     def startEndEditCell(self, event):
         print("Start EndEditCell: ")
@@ -155,36 +125,17 @@ class sheetapp_tk(tkinter.Tk):
             time  = self.startSheet[row,0].data
             stamp = self.startSheet[row,1].data
             self.startSheet.after_idle(self.sendStartMsg,"{:} {:} {:}".format(time,stamp,value))
-    
-    def finishEndEditCell(self, event):
-        print("Start EndEditCell: ")
-        
-        for cell, value in event.cells.table.items():
-            row = cell[0]
-            col = cell[1]
-            print(row,col,value)
-            time  = self.finishSheet[row,0].data
-            stamp = self.finishSheet[row,1].data
-            self.finishSheet.after_idle(self.sendFinishMsg,"{:} {:} {:}".format(time,stamp,value))
-                     
+     
     def sendStartMsg(self,*args):
         if messagebox.askyesno("MODBUS", "Sende Startnummer zur Basis"):
             if len(args) == 1:
                 print("Send: ",args[0])
                 mqtt_client.publish("elzwelle/stopwatch/start/number", payload=args[0], qos=1)
                 
-    def sendFinishMsg(self,*args):
-        if messagebox.askyesno("MODBUS", "Sende Startnummer zur Basis"):
-            if len(args) == 1:
-                print("Send: ",args[0])
-                mqtt_client.publish("elzwelle/stopwatch/finish/number", payload=args[0], qos=1)
-
     def getSelectedSheet(self):
         tab = self.tabControl.tab(self.tabControl.select(),"text")
         if tab == "Start":
             return self.startSheet
-        elif tab == "Ziel":
-            return self.finishSheet
 
     def saveSheet(self):
         saveSheet = self.getSelectedSheet()
@@ -248,6 +199,16 @@ class sheetapp_tk(tkinter.Tk):
         except Exception as error:
             print(error)
             return
+        
+    def clearSheet(self):
+        tab = self.tabControl.index(self.tabControl.select())  
+        if messagebox.askyesno("Start/Ziel", "Alle Daten löschen ?"):
+            print("Clear sheet:",tab)
+            if tab == 0:
+                self.startSheet.deselect()
+                self.startSheet.data = []
+                self.slot =  0;
+    
 #-------------------------------------------------------------------
 
 # setting callbacks for different events to see if it works, print the message etc.
@@ -335,70 +296,39 @@ def on_message(client, userdata, msg):
     payload = msg.payload.decode('ISO8859-1')        # ('utf-8')
               
     if msg.topic == 'elzwelle/stopwatch/start':
-        if config.getboolean('view','start_enabled'):
-            try:
-                data = payload.split(' ')
-                
-                app.startSheet.insert_row([ data[0].strip(),
-                                            data[1].strip(),
-                                            data[2].strip(),
-                                            app.slot]) 
-                serialPort.write("${:},{:}\r".format(data[1].strip().replace(',',''),app.slot).encode()) 
-                row = app.startSheet.get_currently_selected().row
-                app.startSheet.set_cell_data(row,3,app.slot)
-                #app.startSheet[row].highlight(bg='#D3E3FD')
-                app.startSheet.deselect(row)
-                app.startSheet.see(row)
-                app.pending = row
-                app.slot =(app.slot +1) & (app.maxSlots - 1)
-                if app.startSheet.get_total_rows() > app.maxSlots:
-                    print("Delete row")
-                    app.startSheet.del_row(0)
-            except Exception as e:
-                print("MQTT Decode exception: ",e,msg.payload)
+        try:
+            data = payload.split(' ')
             
+            app.startSheet.insert_row([ data[0].strip(),
+                                        data[1].strip(),
+                                        data[2].strip(),
+                                        app.slot]) 
+            serialPort.write("${:},{:}\r".format(data[1].strip().replace(',',''),app.slot).encode()) 
+            row = app.startSheet.get_currently_selected().row
+            app.startSheet.set_cell_data(row,3,app.slot)
+            #app.startSheet[row].highlight(bg='#D3E3FD')
+            app.startSheet.deselect(row)
+            app.startSheet.see(row)
+            app.pending = row
+            app.slot =(app.slot +1) & (app.maxSlots - 1)
+            if app.startSheet.get_total_rows() > app.maxSlots:
+                print("Delete row")
+                app.startSheet.del_row(0)
+        except Exception as e:
+            print("MQTT Decode exception: ",e,msg.payload)
+        
     if msg.topic == "elzwelle/stopwatch/start/number/akn":
-        if config.getboolean('view','start_enabled'):
-            try:
-                data  = payload.split(' ')
-                stamp = data[1].strip()
-                num   = data[2].strip() 
-                row = int(app.startSheet.span("B").data.index(str(stamp)))
-                app.startSheet[row].highlight(bg = "aquamarine")   
-                print("AKN: ",row,stamp,num)
-                 
-            except Exception as e:
-                print("MQTT Decode exception: ",e,msg.payload)
-            
-    if msg.topic == 'elzwelle/stopwatch/finish':
-        if config.getboolean('view','finish_enabled'):
-            try:
-                data = payload.split(' ')
-                app.finishSheet.insert_row([ data[0].strip(),
-                                            data[1].strip(),
-                                            data[2].strip(),
-                                            app.slot]) 
-                serialPort.write("${:},{:}\r".format(data[1].strip().replace(',',''),app.slot).encode())
-                row = app.finishSheet.get_currently_selected().row
-                app.finishSheet.set_cell_data(row,3,app.slot)
-                #app.finishSheet[row].highlight(bg='#D3E3FD')
-                app.finishSheet.deselect(row)
-                app.slot =(app.slot +1) & (app.maxSlots - 1)     
-            except Exception as e:
-                print("MQTT Decode exception: ",e,msg.payload)
-            
-    if msg.topic == "elzwelle/stopwatch/finish/number/akn":
-        if config.getboolean('view','finish_enabled'):
-            try:
-                data  = payload.split(' ')
-                stamp = data[1].strip()
-                num   = data[2].strip()
-                row = int(app.finishSheet.span("B").data.index(str(stamp)))
-                app.finishSheet[row].highlight(bg = "aquamarine")   
-                print("AKN: ",row,stamp,num)
-            except Exception as e:
-                print("MQTT Decode exception: ",e,msg.payload)
-    
+        try:
+            data  = payload.split(' ')
+            stamp = data[1].strip()
+            num   = data[2].strip() 
+            row = int(app.startSheet.span("B").data.index(str(stamp)))
+            app.startSheet[row].highlight(bg = "aquamarine")   
+            print("AKN: ",row,stamp,num)
+             
+        except Exception as e:
+            print("MQTT Decode exception: ",e,msg.payload)
+        
 #-------------------------------------------------------------------
 # Main program
 #-------------------------------------------------------------------
@@ -427,11 +357,9 @@ if __name__ == '__main__':
                         'baud':'115200',
                         'timeout':'10'}
     
-    config['view'] = {'start_enabled':'yes',
-                      'finish_enabled': 'no',
-                      'slots': 16,
-                      'hide_slots':'no'
-                      }
+    config['view'] = {'slots': 16,
+                      'hide_slots':'no',
+                      'edit_enabled':'no'}
     
     # Platform specific
     if myPlatform == 'Windows':
@@ -472,12 +400,11 @@ if __name__ == '__main__':
     
     # ---------- setup and start GUI --------------
     app = sheetapp_tk(None)
-    
-    if not config.getboolean('view','start_enabled'):
-        app.tabControl.tab(0, state="hidden")
-        
-    if not config.getboolean('view','finish_enabled'):
-        app.tabControl.tab(1, state="hidden") 
+             
+    app.startSheet.popup_menu_add_command(
+        "Clear sheet data",
+        app.clearSheet,
+    )
     
     app.title("MQTT MODBUS Start/Ziel Gateway Elz-Zeit")
     
@@ -522,9 +449,13 @@ if __name__ == '__main__':
     
     def processMessage(line): 
         if app.pending >= 0:
-            app.startSheet[app.pending].highlight(bg='#D3E3FD')
-            app.pending = -1
-            print("Read msg: ", line)     
+            print("Read msg: ", line)
+            if line == "AKN":
+                app.startSheet[app.pending].highlight(bg='#D3E3FD')
+                app.pending = -1
+            if line == "NAK":
+                app.startSheet[app.pending].highlight(bg="pink")
+                app.pending = -1       
          
     # Configure threading
     usbReader = threading.Thread(target = readFunc, args=[serialPort])
