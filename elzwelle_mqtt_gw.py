@@ -323,12 +323,27 @@ def on_message(client, userdata, msg):
             stamp = data[1].strip()
             num   = data[2].strip() 
             row = int(app.startSheet.span("B").data.index(str(stamp)))
-            app.startSheet[row].highlight(bg = "aquamarine")   
-            print("AKN: ",row,stamp,num)
+            app.startSheet.set_cell_data(row,2,num)
+            app.startSheet[row].highlight(bg = "aquamarine")
+            slot = app.startSheet[row,3].data
+            serialPort.write("#{:},{:}\r".format(num,slot).encode())  
+            print("AKN: ",row,stamp,num,slot)
              
         except Exception as e:
             print("MQTT Decode exception: ",e,msg.payload)
-        
+    
+    if msg.topic == "elzwelle/stopwatch/start/number/error":
+        try:
+            data  = payload.split(' ')
+            stamp = data[1].strip()
+            num   = data[2].strip() 
+            row = int(app.startSheet.span("B").data.index(str(stamp)))
+            app.startSheet.set_cell_data(row,2,num)
+            app.startSheet[row].highlight(bg = "pink")   
+            print("AKN: ",row,stamp,num)
+             
+        except Exception as e:
+            print("MQTT Decode exception: ",e,msg.payload)   
 #-------------------------------------------------------------------
 # Main program
 #-------------------------------------------------------------------
@@ -441,7 +456,7 @@ if __name__ == '__main__':
         else:
             row = slots.index(int(slot))
         app.startSheet.set_cell_data(row,2,num)   
-        app.startSheet[row].highlight(bg='aquamarine')
+        app.startSheet[row].highlight(bg='khaki')
         time  = app.startSheet[row,0].data
         stamp = app.startSheet[row,1].data
         payload = "{:} {:} {:}".format(time,stamp,num)
