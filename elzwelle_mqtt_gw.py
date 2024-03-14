@@ -293,6 +293,9 @@ def on_message(client, userdata, msg):
     """
     print(msg.topic + " " + str(msg.qos) + " " + str(msg.payload))
     
+     # drop qos 0 echo from bridge 
+    if msg.qos == 0: return
+    
     payload = msg.payload.decode('ISO8859-1')        # ('utf-8')
               
     if msg.topic == 'elzwelle/stopwatch/start':
