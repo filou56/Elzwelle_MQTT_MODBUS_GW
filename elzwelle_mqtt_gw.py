@@ -115,6 +115,8 @@ class sheetapp_tk(tkinter.Tk):
                                         "drag_select","row_select","copy")
         self.startSheet.extra_bindings("end_edit_cell", func=self.startEndEditCell)
         
+        self.startSheet.edit_validation(self.validateEdits)
+        
     def startEndEditCell(self, event):
         print("Start EndEditCell: ")
         
@@ -136,6 +138,20 @@ class sheetapp_tk(tkinter.Tk):
         tab = self.tabControl.tab(self.tabControl.select(),"text")
         if tab == "Start":
             return self.startSheet
+
+    def validateEdits(self, event):
+        print("Validate: ")
+        for cell, value in event.cells.table.items():
+            row = cell[0]
+            col = cell[1]
+            print(row,col,value)
+            try:
+                num = int(value.replace(',','.'))
+                return "{:d}".format(num)
+            except Exception as error:
+                print(error)
+                messagebox.showerror(title="Fehler", message="Keine gültige Zahl !")
+        return
 
     def saveSheet(self):
         saveSheet = self.getSelectedSheet()
